@@ -42,13 +42,17 @@ func runListVMs(cmd *cobra.Command, args []string) error {
 	table := uitable.New()
 	table.Wrap = true
 
-	table.AddRow("Name", "Created", "Image", "Status", "Restart policy", "Assigned worker")
+	table.AddRow("Name", "Created", "Image", "Status", "Restart policy", "TTL", "Assigned worker")
 
 	for _, vm := range vms {
 		restartPolicyInfo := fmt.Sprintf("%s (%d restarts)", vm.RestartPolicy, vm.RestartCount)
 		createdAtInfo := humanize.RelTime(vm.CreatedAt, time.Now(), "ago", "in the future")
+		ttlInfo := "-"
+		if vm.TTLSeconds > 0 {
+			ttlInfo = (time.Duration(vm.TTLSeconds) * time.Second).String()
+		}
 
-		table.AddRow(vm.Name, createdAtInfo, vm.Image, vm.Status, restartPolicyInfo, vm.Worker)
+		table.AddRow(vm.Name, createdAtInfo, vm.Image, vm.Status, restartPolicyInfo, ttlInfo, vm.Worker)
 	}
 
 	fmt.Println(table)

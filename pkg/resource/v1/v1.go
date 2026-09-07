@@ -109,6 +109,14 @@ type VM struct {
 	ScheduledAt time.Time `json:"scheduled_at,omitempty"`
 	StartedAt   time.Time `json:"started_at,omitempty"`
 
+	// TTLSeconds, when non-zero, is the maximum duration (in seconds) that
+	// this VM is allowed to stay alive, measured from CreatedAt.
+	//
+	// Once a VM has been alive longer than its TTL, the Controller deletes
+	// it exactly as if "orchard delete vm <name>" had been called. Orchard
+	// does not recreate the VM afterwards — that's the caller's job.
+	TTLSeconds uint64 `json:"ttl_seconds,omitempty"`
+
 	// Generation is incremented by the controller each time
 	// the resource's specification is changed.
 	//
