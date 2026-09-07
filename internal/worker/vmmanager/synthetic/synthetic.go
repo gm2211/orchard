@@ -25,6 +25,10 @@ type VM struct {
 	wg         sync.WaitGroup
 	logger     *zap.SugaredLogger
 
+	// ShutdownScriptDelay simulates the time a shutdown script takes to run,
+	// letting tests exercise the shutdown script timeout behavior without a real VM.
+	ShutdownScriptDelay time.Duration
+
 	*base.VM
 }
 
@@ -149,6 +153,22 @@ func (vm *VM) Stop() <-chan error {
 	errChan <- nil
 
 	return errChan
+}
+
+// RunShutdownScript simulates running the VM's shutdown script (if any) over SSH,
+// taking ShutdownScriptDelay to "complete" so tests can exercise the shutdown
+// script timeout behavior.
+func (vm *VM) RunShutdownScript(ctx context.Context) error {
+	if vm.resource.ShutdownScript == nil {
+		return nil
+	}
+
+	select {
+	case <-time.After(vm.ShutdownScriptDelay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (vm *VM) Delete() error {

@@ -30,6 +30,12 @@ type VM interface {
 	Suspend() <-chan error
 	IP(ctx context.Context) (string, error)
 	Stop() <-chan error
+	// RunShutdownScript runs the VM's ShutdownScript (if any) over SSH.
+	//
+	// It must respect ctx and return once it's done, even if the script itself
+	// hasn't finished, so that callers can bound how long they wait for it
+	// before proceeding with deletion regardless of the outcome.
+	RunShutdownScript(ctx context.Context) error
 	Delete() error
 }
 

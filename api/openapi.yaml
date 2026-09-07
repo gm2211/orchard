@@ -799,6 +799,33 @@ components:
               echo $GREETING
             env:
               GREETING: "Hello, World!"
+        shutdown_script:
+          type: object
+          description: |
+            Shutdown script to run over SSH right before the VM is stopped and deleted,
+            symmetric to `startup_script`.
+
+            It's fail-open: if it errors out or doesn't finish within
+            `shutdown_script_timeout_seconds`, the Worker logs the failure and
+            proceeds with deletion anyway.
+          properties:
+            script_content:
+              type: string
+            env:
+              type: object
+              additionalProperties:
+                type: string
+          example:
+            script_content: |
+              #!/bin/zsh
+
+              echo "Goodbye!"
+        shutdown_script_timeout_seconds:
+          type: integer
+          description: |
+            Maximum time (in seconds) to wait for `shutdown_script` to finish
+            before proceeding with VM deletion anyway.
+          default: 600
         restart_policy:
           type: string
           description: |

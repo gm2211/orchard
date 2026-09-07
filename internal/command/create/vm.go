@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cirruslabs/orchard/internal/imageconstant"
 	"github.com/cirruslabs/orchard/internal/simplename"
@@ -38,6 +39,8 @@ var labels map[string]string
 var randomSerial bool
 var restartPolicy string
 var startupScript string
+var shutdownScript string
+var shutdownScriptTimeout time.Duration
 var hostDirsRaw []string
 var imagePullPolicy string
 
@@ -93,6 +96,13 @@ func newCreateVMCommand() *cobra.Command {
 	command.Flags().StringVar(&startupScript, "startup-script", "",
 		"startup script (e.g. --startup-script=\"sync\") or a path to a script file prefixed with \"@\" "+
 			"(e.g. \"--startup-script=@script.sh\")")
+	command.Flags().StringVar(&shutdownScript, "shutdown-script", "",
+		"shutdown script (e.g. --shutdown-script=\"sync\") or a path to a script file prefixed with \"@\" "+
+			"(e.g. \"--shutdown-script=@script.sh\"), run inside the VM over SSH right before it is stopped "+
+			"and deleted; a script that errors out or times out is logged and does not prevent deletion")
+	command.Flags().DurationVar(&shutdownScriptTimeout, "shutdown-script-timeout", 0,
+		fmt.Sprintf("maximum time to wait for the shutdown script to finish before proceeding with VM "+
+			"deletion anyway (defaults to %s)", v1.DefaultShutdownScriptTimeoutSeconds*time.Second))
 	command.Flags().StringSliceVar(&hostDirsRaw, "host-dirs", []string{},
 		"directories on the Orchard Worker host to mount to a VM, can be specified multiple times "+
 			"and/or be comma-separated (see \"tart run\"'s --dir argument for syntax)")
@@ -207,6 +217,26 @@ func runCreateVM(cmd *cobra.Command, args []string) error {
 		vm.StartupScript = &v1.VMScript{
 			ScriptContent: startupScript,
 		}
+	}
+
+	// Convert shutdown script, optionally reading it from the file system
+	if strings.HasPrefix(shutdownScript, scriptFilePrefix) {
+		shutdownScriptBytes, err := os.ReadFile(strings.TrimPrefix(shutdownScript, scriptFilePrefix))
+		if err != nil {
+			return err
+		}
+
+		vm.ShutdownScript = &v1.VMScript{
+			ScriptContent: string(shutdownScriptBytes),
+		}
+	} else if shutdownScript != "" {
+		vm.ShutdownScript = &v1.VMScript{
+			ScriptContent: shutdownScript,
+		}
+	}
+
+	if shutdownScriptTimeout > 0 {
+		vm.ShutdownScriptTimeoutSeconds = uint64(shutdownScriptTimeout.Seconds())
 	}
 
 	client, err := client.New()
