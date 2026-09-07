@@ -50,6 +50,19 @@ type Transaction interface {
 	SetClusterSettings(clusterSettings v1.ClusterSettings) error
 }
 
+// DeleteVM removes a VM and its associated events from the store.
+//
+// This is shared by the DELETE /v1/vms/:name API handler and the
+// Scheduler's TTL expiry check so that both code paths perform
+// identical cleanup when a VM is deleted.
+func DeleteVM(txn Transaction, vm v1.VM) error {
+	if err := txn.DeleteVM(vm.Name); err != nil {
+		return err
+	}
+
+	return txn.DeleteEvents("vms", vm.UID)
+}
+
 type ListOptions struct {
 	Limit  int
 	Cursor []byte

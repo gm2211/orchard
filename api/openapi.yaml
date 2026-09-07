@@ -832,6 +832,18 @@ components:
             VM restart policy: specify "Never" to never restart or "OnFailure" to only restart when the VM fails
           default: Never
           enum: [ Never, OnFailure ]
+        ttl_seconds:
+          type: integer
+          description: |
+            Maximum time (in seconds) this VM is allowed to stay alive, measured from
+            its `createdAt` timestamp.
+
+            Once exceeded, the Controller deletes the VM exactly as if a
+            `DELETE /v1/vms/{name}` request was made (e.g. running any shutdown hooks).
+            Orchard does not recreate the VM afterwards — that's the caller's responsibility.
+
+            A value of `0` (the default) disables the TTL.
+          default: 0
         resources:
           type: object
           description: Resources required by this VM on the worker

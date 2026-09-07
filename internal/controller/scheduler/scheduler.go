@@ -42,6 +42,7 @@ type Scheduler struct {
 	schedulingTimeHistogram metric.Float64Histogram
 	workerStatusGauge       metric.Int64ObservableGauge
 	vmStatusGauge           metric.Int64ObservableGauge
+	vmTTLExpiredCounter     metric.Int64Counter
 }
 
 func NewScheduler(
@@ -79,6 +80,12 @@ func NewScheduler(
 
 	scheduler.schedulingTimeHistogram, err = opentelemetry.DefaultMeter.
 		Float64Histogram("org.cirruslabs.orchard.controller.scheduling_time")
+	if err != nil {
+		return nil, err
+	}
+
+	scheduler.vmTTLExpiredCounter, err = opentelemetry.DefaultMeter.
+		Int64Counter("org.cirruslabs.orchard.controller.scheduler.vm_ttl_expired")
 	if err != nil {
 		return nil, err
 	}
@@ -480,8 +487,11 @@ func (scheduler *Scheduler) healthCheckingLoopIteration() (int, error) {
 	// transaction, re-checking that the VM still exists
 	// and it is still scheduled
 	for _, vm := range vms {
-		if !vm.IsScheduled() {
-			// Not a scheduled VM
+		ttlExpired := vmTTLExpired(vm)
+
+		if !ttlExpired && !vm.IsScheduled() {
+			// Not a scheduled VM and its TTL (if any) hasn't
+			// expired yet
 			//
 			// We'll re-check this below, but this allows us
 			// to avoid wasting cycles opening a transaction
@@ -500,7 +510,11 @@ func (scheduler *Scheduler) healthCheckingLoopIteration() (int, error) {
 				return err
 			}
 
-			if !vm.IsScheduled() {
+			if vmTTLExpired(*currentVM) {
+				return scheduler.deleteExpiredVM(txn, *currentVM)
+			}
+
+			if !currentVM.IsScheduled() {
 				// Not a scheduled VM, nothing to do
 				return nil
 			}
@@ -512,6 +526,37 @@ func (scheduler *Scheduler) healthCheckingLoopIteration() (int, error) {
 	}
 
 	return numVMs, nil
+}
+
+// vmTTLExpired reports whether the given VM has a non-zero TTL and has
+// been alive (as measured from its CreatedAt) for longer than that TTL.
+func vmTTLExpired(vm v1.VM) bool {
+	return vm.TTLSeconds > 0 && time.Since(vm.CreatedAt) > time.Duration(vm.TTLSeconds)*time.Second
+}
+
+// deleteExpiredVM deletes a VM that has exceeded its TTL.
+//
+// It performs exactly the same store mutations as the DELETE /v1/vms/:name
+// API handler (see Controller.deleteVM()) so that a VM deleted because of
+// TTL expiry looks identical, from a stored-state perspective, to one
+// deleted explicitly via "orchard delete vm". Orchard does not recreate
+// the VM afterwards — that's the caller's responsibility.
+func (scheduler *Scheduler) deleteExpiredVM(txn storepkg.Transaction, vm v1.VM) error {
+	ttl := time.Duration(vm.TTLSeconds) * time.Second
+
+	scheduler.logger.Infof("VM %s exceeded TTL (%s), deleting", vm.Name, ttl)
+
+	if err := storepkg.DeleteVM(txn, vm); err != nil {
+		return err
+	}
+
+	if scheduler.vmTTLExpiredCounter != nil {
+		scheduler.vmTTLExpiredCounter.Add(context.Background(), 1)
+	}
+
+	lifecycle.Report(&vm, "VM deleted", scheduler.logger)
+
+	return nil
 }
 
 func (scheduler *Scheduler) healthCheckVM(txn storepkg.Transaction, vm v1.VM) error {

@@ -112,6 +112,12 @@ func runGetVM(cmd *cobra.Command, args []string) error {
 	table.AddRow("Restarted", restartedAtInfo)
 	table.AddRow("Restart count", vm.RestartCount)
 
+	ttlInfo := "disabled"
+	if vm.TTLSeconds > 0 {
+		ttlInfo = (time.Duration(vm.TTLSeconds) * time.Second).String()
+	}
+	table.AddRow("TTL", ttlInfo)
+
 	resourcesInfo := strings.Join(lo.MapToSlice(vm.Resources, func(key string, value uint64) string {
 		return fmt.Sprintf("%s: %d", key, value)
 	}), "\n")

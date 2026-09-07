@@ -43,6 +43,7 @@ var shutdownScript string
 var shutdownScriptTimeout time.Duration
 var hostDirsRaw []string
 var imagePullPolicy string
+var ttl time.Duration
 
 func newCreateVMCommand() *cobra.Command {
 	command := &cobra.Command{
@@ -110,6 +111,9 @@ func newCreateVMCommand() *cobra.Command {
 		fmt.Sprintf("image pull policy for this VM, by default the image is only pulled if it doesn't "+
 			"exist in the cache (%q), specify %q to always try to pull the image",
 			v1.ImagePullPolicyIfNotPresent, v1.ImagePullPolicyAlways))
+	command.Flags().DurationVar(&ttl, "ttl", 0, "maximum time this VM is allowed to stay alive "+
+		"(e.g. \"3h\"), measured from its creation time; once exceeded, the Controller deletes the VM as if "+
+		"\"orchard delete vm\" was called (the VM is not recreated); 0 disables the TTL (default)")
 
 	return command
 }
@@ -149,14 +153,19 @@ func runCreateVM(cmd *cobra.Command, args []string) error {
 		hostDirs = append(hostDirs, hostDir)
 	}
 
+	if ttl < 0 {
+		return fmt.Errorf("%w: --ttl cannot be negative", ErrVMFailed)
+	}
+
 	vm := &v1.VM{
 		Meta: v1.Meta{
 			Name: name,
 		},
-		Image:    image,
-		CPU:      cpu,
-		Memory:   memory,
-		DiskSize: diskSize,
+		Image:      image,
+		CPU:        cpu,
+		Memory:     memory,
+		DiskSize:   diskSize,
+		TTLSeconds: uint64(ttl.Seconds()),
 		VMSpec: v1.VMSpec{
 			OS:                   vmOS,
 			Arch:                 vmArch,
