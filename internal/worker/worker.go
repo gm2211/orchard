@@ -956,6 +956,8 @@ func waitForVMStop(ctx context.Context, vm vmmanager.VM) error {
 }
 
 func (worker *Worker) deleteVM(vm vmmanager.VM) error {
+	worker.runShutdownScript(vm)
+
 	<-vm.Stop()
 
 	if err := vm.Delete(); err != nil {
@@ -965,6 +967,45 @@ func (worker *Worker) deleteVM(vm vmmanager.VM) error {
 	worker.vmm.Delete(vm.OnDiskName())
 
 	return nil
+}
+
+// runShutdownScript runs vm's ShutdownScript (if any) over SSH before it is
+// stopped and deleted, symmetric to the StartupScript that runs on boot.
+//
+// It's fail-open: a script that's not configured, that errors out or that
+// doesn't finish within its timeout is logged (except when not configured)
+// and otherwise ignored, so that VM deletion never hangs on it. VMs that
+// aren't currently running have nothing to run the script against, so they're
+// skipped entirely.
+func (worker *Worker) runShutdownScript(vm vmmanager.VM) {
+	resource := vm.Resource()
+	if resource.ShutdownScript == nil || !vm.Running() {
+		return
+	}
+
+	timeout := resource.ShutdownScriptTimeout()
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	worker.logger.Debugf("running shutdown script for VM %s", vm.OnDiskName())
+
+	done := make(chan error, 1)
+
+	go func() {
+		done <- vm.RunShutdownScript(ctx)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			worker.logger.Warnf("shutdown script for VM %s failed, proceeding with deletion anyway: %v",
+				vm.OnDiskName(), err)
+		}
+	case <-ctx.Done():
+		worker.logger.Warnf("shutdown script for VM %s did not finish within %s, "+
+			"proceeding with deletion anyway", vm.OnDiskName(), timeout)
+	}
 }
 
 func (worker *Worker) createVM(odn ondiskname.OnDiskName, vmResource v1.VM) {

@@ -319,6 +319,24 @@ func (vm *VM) Start(eventStreamer *client.EventStreamer) {
 	}()
 }
 
+// RunShutdownScript runs the VM's shutdown script (if any) over SSH.
+//
+// It's the caller's responsibility to bound ctx's lifetime so that a slow or
+// unresponsive script doesn't hold up VM deletion.
+func (vm *VM) RunShutdownScript(ctx context.Context) error {
+	resource := vm.Resource()
+	if resource.ShutdownScript == nil {
+		return nil
+	}
+
+	consumeLine := func(line string) {
+		vm.logger.Debugf("shutdown script: %s", line)
+	}
+
+	return vm.Shell(ctx, resource.Username, resource.Password, resource.ShutdownScript.ScriptContent,
+		resource.ShutdownScript.Env, consumeLine, vm.dialer, vm.IP)
+}
+
 func (vm *VM) Delete() error {
 	// Cancel all currently running Vetu invocations
 	// (e.g. "vetu clone", "vetu run", etc.)

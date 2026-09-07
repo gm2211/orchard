@@ -67,6 +67,19 @@ type VM struct {
 	Password      string    `json:"password,omitempty"`
 	StartupScript *VMScript `json:"startup_script,omitempty"`
 
+	// ShutdownScript is run over SSH right before the VM is stopped and deleted,
+	// symmetric to StartupScript.
+	//
+	// It's fail-open: if it errors out or exceeds ShutdownScriptTimeoutSeconds,
+	// the Worker logs the failure and proceeds with deletion anyway.
+	ShutdownScript *VMScript `json:"shutdown_script,omitempty"`
+
+	// ShutdownScriptTimeoutSeconds bounds how long the Worker waits for
+	// ShutdownScript to finish before proceeding with deletion anyway.
+	//
+	// Defaults to DefaultShutdownScriptTimeoutSeconds when zero.
+	ShutdownScriptTimeoutSeconds uint64 `json:"shutdown_script_timeout_seconds,omitempty"`
+
 	RestartPolicy RestartPolicy `json:"restart_policy,omitempty"`
 	RestartedAt   time.Time     `json:"restarted_at,omitempty"`
 	RestartCount  uint64        `json:"restart_count,omitempty"`
@@ -133,6 +146,19 @@ func (vm *VM) SSHPassword() string {
 	}
 
 	return "admin"
+}
+
+// DefaultShutdownScriptTimeoutSeconds is used when ShutdownScriptTimeoutSeconds is unset.
+const DefaultShutdownScriptTimeoutSeconds = 600
+
+// ShutdownScriptTimeout returns the configured ShutdownScriptTimeoutSeconds as a
+// time.Duration, falling back to DefaultShutdownScriptTimeoutSeconds when unset.
+func (vm *VM) ShutdownScriptTimeout() time.Duration {
+	if vm.ShutdownScriptTimeoutSeconds == 0 {
+		return DefaultShutdownScriptTimeoutSeconds * time.Second
+	}
+
+	return time.Duration(vm.ShutdownScriptTimeoutSeconds) * time.Second
 }
 
 func (vm *VM) IsScheduled() bool {
