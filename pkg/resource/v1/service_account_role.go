@@ -17,6 +17,9 @@ const (
 	ServiceAccountRoleHostProcessConnect ServiceAccountRole = "host-process:connect"
 	ServiceAccountRoleAdminRead          ServiceAccountRole = "admin:read"
 	ServiceAccountRoleAdminWrite         ServiceAccountRole = "admin:write"
+	// ServiceAccountRoleWorkerIssue can create only grove-worker-* accounts carrying the
+	// compute:write + compute:connect roles. It cannot read, update, or delete accounts.
+	ServiceAccountRoleWorkerIssue ServiceAccountRole = "service-account:issue-worker"
 )
 
 func NewServiceAccountRole(name string) (ServiceAccountRole, error) {
@@ -35,6 +38,8 @@ func NewServiceAccountRole(name string) (ServiceAccountRole, error) {
 		return ServiceAccountRoleAdminRead, nil
 	case string(ServiceAccountRoleAdminWrite):
 		return ServiceAccountRoleAdminWrite, nil
+	case string(ServiceAccountRoleWorkerIssue):
+		return ServiceAccountRoleWorkerIssue, nil
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedServiceAccountRole, name)
 	}
@@ -49,5 +54,6 @@ func AllServiceAccountRoles() []ServiceAccountRole {
 		ServiceAccountRoleHostProcessConnect,
 		ServiceAccountRoleAdminRead,
 		ServiceAccountRoleAdminWrite,
+		ServiceAccountRoleWorkerIssue,
 	}
 }
