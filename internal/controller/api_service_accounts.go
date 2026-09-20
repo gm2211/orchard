@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	storepkg "github.com/cirruslabs/orchard/internal/controller/store"
@@ -14,7 +15,7 @@ import (
 )
 
 func (controller *Controller) createServiceAccount(ctx *gin.Context) responder.Responder {
-	if responder := controller.authorize(ctx, v1.ServiceAccountRoleAdminWrite); responder != nil {
+	if responder := controller.authorizeAny(ctx, v1.ServiceAccountRoleAdminWrite, v1.ServiceAccountRoleWorkerIssue); responder != nil {
 		return responder
 	}
 
@@ -40,6 +41,10 @@ func (controller *Controller) createServiceAccount(ctx *gin.Context) responder.R
 			return responder.JSON(http.StatusPreconditionFailed,
 				NewErrorResponse("unsupported role \"%s\"", role))
 		}
+	}
+	if !callerHasRole(ctx, v1.ServiceAccountRoleAdminWrite) && !validWorkerIssuedAccount(&serviceAccount) {
+		return responder.JSON(http.StatusForbidden,
+			NewErrorResponse("worker issuer may create only grove-worker-* accounts with compute:write and compute:connect roles"))
 	}
 
 	if serviceAccount.Token == "" {
@@ -69,6 +74,41 @@ func (controller *Controller) createServiceAccount(ctx *gin.Context) responder.R
 
 		return responder.JSON(http.StatusOK, &serviceAccount)
 	})
+}
+
+func callerHasRole(ctx *gin.Context, required v1.ServiceAccountRole) bool {
+	untyped, ok := ctx.Get(ctxServiceAccountKey)
+	if !ok {
+		return false
+	}
+	account, ok := untyped.(*v1.ServiceAccount)
+	if !ok {
+		return false
+	}
+	for _, role := range account.Roles {
+		if role == required {
+			return true
+		}
+	}
+	return false
+}
+
+func validWorkerIssuedAccount(account *v1.ServiceAccount) bool {
+	if !strings.HasPrefix(account.Name, "grove-worker-") || len(account.Roles) != 2 {
+		return false
+	}
+	var write, connect bool
+	for _, role := range account.Roles {
+		switch role {
+		case v1.ServiceAccountRoleComputeWrite:
+			write = true
+		case v1.ServiceAccountRoleComputeConnect:
+			connect = true
+		default:
+			return false
+		}
+	}
+	return write && connect
 }
 
 func (controller *Controller) updateServiceAccount(ctx *gin.Context) responder.Responder {
