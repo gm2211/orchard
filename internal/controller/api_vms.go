@@ -385,11 +385,10 @@ func (controller *Controller) getVM(ctx *gin.Context) responder.Responder {
 }
 
 func (controller *Controller) listVMs(ctx *gin.Context) responder.Responder {
-	if responder := controller.authorize(ctx, v1.ServiceAccountRoleComputeRead); responder != nil {
-		return responder
+	filters, authResponder := controller.authorizeVMList(ctx, nil)
+	if authResponder != nil {
+		return authResponder
 	}
-
-	var filters []v1.Filter
 
 	if filterRaw := ctx.Query("filter"); filterRaw != "" {
 		for _, filterRaw := range strings.Split(filterRaw, ",") {

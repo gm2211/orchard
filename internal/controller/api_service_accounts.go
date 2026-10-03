@@ -44,7 +44,7 @@ func (controller *Controller) createServiceAccount(ctx *gin.Context) responder.R
 	}
 	if !callerHasRole(ctx, v1.ServiceAccountRoleAdminWrite) && !validWorkerIssuedAccount(&serviceAccount) {
 		return responder.JSON(http.StatusForbidden,
-			NewErrorResponse("worker issuer may create only grove-worker-* accounts with compute:write and compute:connect roles"))
+			NewErrorResponse("worker issuer may create only grove-worker-* accounts with a valid workerName and compute:write and compute:connect roles"))
 	}
 
 	if serviceAccount.Token == "" {
@@ -94,7 +94,14 @@ func callerHasRole(ctx *gin.Context, required v1.ServiceAccountRole) bool {
 }
 
 func validWorkerIssuedAccount(account *v1.ServiceAccount) bool {
-	if !strings.HasPrefix(account.Name, "grove-worker-") || len(account.Roles) != 2 {
+	if !validWorkerIssuerRoleSet(account) || account.WorkerName == "" || simplename.Validate(account.WorkerName) != nil {
+		return false
+	}
+	return true
+}
+
+func validWorkerIssuerRoleSet(account *v1.ServiceAccount) bool {
+	if account == nil || !strings.HasPrefix(account.Name, "grove-worker-") || len(account.Roles) != 2 {
 		return false
 	}
 	var write, connect bool
@@ -152,6 +159,13 @@ func (controller *Controller) updateServiceAccount(ctx *gin.Context) responder.R
 
 		dbServiceAccount.Token = userServiceAccount.Token
 		dbServiceAccount.Roles = userServiceAccount.Roles
+		if userServiceAccount.WorkerName != "" {
+			if err := simplename.Validate(userServiceAccount.WorkerName); err != nil {
+				return responder.JSON(http.StatusPreconditionFailed,
+					NewErrorResponse("service account workerName %v", err))
+			}
+			dbServiceAccount.WorkerName = userServiceAccount.WorkerName
+		}
 
 		if err := txn.SetServiceAccount(dbServiceAccount); err != nil {
 			controller.logger.Errorf("failed to update service account in the DB: %v", err)

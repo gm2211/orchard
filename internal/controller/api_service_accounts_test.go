@@ -9,8 +9,9 @@ import (
 
 func TestValidWorkerIssuedAccount(t *testing.T) {
 	require.True(t, validWorkerIssuedAccount(&v1.ServiceAccount{
-		Meta:  v1.Meta{Name: "grove-worker-mac-123"},
-		Roles: []v1.ServiceAccountRole{v1.ServiceAccountRoleComputeWrite, v1.ServiceAccountRoleComputeConnect},
+		Meta:       v1.Meta{Name: "grove-worker-mac-123"},
+		WorkerName: "mac-123",
+		Roles:      []v1.ServiceAccountRole{v1.ServiceAccountRoleComputeWrite, v1.ServiceAccountRoleComputeConnect},
 	}))
 	require.False(t, validWorkerIssuedAccount(&v1.ServiceAccount{
 		Meta:  v1.Meta{Name: "admin"},
@@ -23,6 +24,10 @@ func TestValidWorkerIssuedAccount(t *testing.T) {
 	require.False(t, validWorkerIssuedAccount(&v1.ServiceAccount{
 		Meta:  v1.Meta{Name: "grove-worker-missing-connect"},
 		Roles: []v1.ServiceAccountRole{v1.ServiceAccountRoleComputeWrite},
+	}))
+	require.False(t, validWorkerIssuedAccount(&v1.ServiceAccount{
+		Meta:  v1.Meta{Name: "grove-worker-missing-binding"},
+		Roles: []v1.ServiceAccountRole{v1.ServiceAccountRoleComputeWrite, v1.ServiceAccountRoleComputeConnect},
 	}))
 }
 
