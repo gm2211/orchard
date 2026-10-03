@@ -121,11 +121,10 @@ func (controller *Controller) updateWorker(ctx *gin.Context) responder.Responder
 }
 
 func (controller *Controller) getWorker(ctx *gin.Context) responder.Responder {
-	if responder := controller.authorize(ctx, v1.ServiceAccountRoleComputeRead); responder != nil {
-		return responder
-	}
-
 	name := ctx.Param("name")
+	if !controller.authorizeWorkerWatch(ctx, name) {
+		return responder.JSON(http.StatusUnauthorized, NewErrorResponse("worker identity is not authorized"))
+	}
 
 	return controller.storeView(func(txn storepkg.Transaction) responder.Responder {
 		worker, err := txn.GetWorker(name)

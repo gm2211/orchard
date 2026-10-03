@@ -20,6 +20,7 @@ import (
 type workerScopeTestStore struct {
 	storepkg.Store
 	vms             []v1.VM
+	workers         map[string]*v1.Worker
 	serviceAccounts map[string]*v1.ServiceAccount
 }
 
@@ -38,6 +39,43 @@ type workerScopeTestTransaction struct {
 
 func (tx *workerScopeTestTransaction) ListVMs() ([]v1.VM, error) {
 	return tx.db.vms, nil
+}
+
+func (tx *workerScopeTestTransaction) GetWorker(name string) (*v1.Worker, error) {
+	worker, ok := tx.db.workers[name]
+	if !ok {
+		return nil, storepkg.ErrNotFound
+	}
+	return worker, nil
+}
+
+func TestGetWorkerScopesHeartbeatRead(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controller := &Controller{store: &workerScopeTestStore{workers: map[string]*v1.Worker{
+		"worker-a": {Meta: v1.Meta{Name: "worker-a"}},
+		"worker-b": {Meta: v1.Meta{Name: "worker-b"}},
+	}}}
+	for _, test := range []struct {
+		name      string
+		account   *v1.ServiceAccount
+		requested string
+		want      int
+	}{
+		{"own heartbeat", workerScopeAccount("worker-a"), "worker-a", http.StatusOK},
+		{"other heartbeat denied", workerScopeAccount("worker-a"), "worker-b", http.StatusUnauthorized},
+		{"unbound denied", workerScopeAccount(""), "worker-a", http.StatusUnauthorized},
+		{"read operator retains access", &v1.ServiceAccount{Roles: []v1.ServiceAccountRole{v1.ServiceAccountRoleComputeRead}}, "worker-b", http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/workers/"+test.requested, nil)
+			ctx.Params = gin.Params{{Key: "name", Value: test.requested}}
+			ctx.Set(ctxServiceAccountKey, test.account)
+			controller.getWorker(ctx).Respond(ctx)
+			require.Equal(t, test.want, recorder.Code)
+		})
+	}
 }
 
 func (tx *workerScopeTestTransaction) GetServiceAccount(name string) (*v1.ServiceAccount, error) {
