@@ -17,16 +17,15 @@ import (
 )
 
 func (controller *Controller) Watch(_ *emptypb.Empty, stream rpc.Controller_WatchServer) error {
-	if !controller.authorizeGRPC(stream.Context(), v1pkg.ServiceAccountRoleComputeWrite) {
-		return status.Errorf(codes.Unauthenticated, "auth failed")
-	}
-
 	workerMetadataValue := metadata.ValueFromIncomingContext(stream.Context(), rpc.MetadataWorkerNameKey)
 	if len(workerMetadataValue) == 0 {
 		return status.Errorf(codes.InvalidArgument, "no worker ident in metadata")
 	}
 
 	worker := workerMetadataValue[0]
+	if !controller.authorizeGRPCWorkerWatch(stream.Context(), worker) {
+		return status.Errorf(codes.Unauthenticated, "auth failed")
+	}
 	workerCh, cancel := controller.workerNotifier.Register(stream.Context(), worker)
 	defer cancel()
 

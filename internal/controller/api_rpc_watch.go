@@ -16,15 +16,14 @@ import (
 
 //nolint:protogetter // Preserve the original host-process wire conversion.
 func (controller *Controller) rpcWatch(ctx *gin.Context) responder.Responder {
-	if responder := controller.authorize(ctx, v1.ServiceAccountRoleComputeRead); responder != nil {
-		return responder
-	}
-
 	// Retrieve and parse path and query parameters
 	workerName := ctx.Query("workerName")
 
 	if workerName == "" {
 		return responder.Error(errors.New("worker name cannot be empty"))
+	}
+	if !controller.authorizeWorkerWatch(ctx, workerName) {
+		return responder.JSON(401, NewErrorResponse("compute:read or a matching worker-bound credential is required"))
 	}
 
 	// Register with the worker notifier to forward requests from other
