@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/cirruslabs/orchard/internal/execstream"
+	"github.com/cirruslabs/orchard/internal/guestauth"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
 )
@@ -53,7 +54,7 @@ func NewClient(netConn net.Conn, user string, password string) (*Client, error) 
 		},
 		User: user,
 		Auth: []ssh.AuthMethod{
-			ssh.Password(password),
+			guestauth.PasswordAuth(password),
 		},
 	})
 	if err != nil {
