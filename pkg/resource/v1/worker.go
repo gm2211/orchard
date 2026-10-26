@@ -45,6 +45,11 @@ type WorkerCapability string
 
 const WorkerCapabilityVMEndpoints WorkerCapability = "vm-endpoints"
 
+// WorkerCapabilityGuestPasswordRotation means the worker's startup and shutdown scripts log in
+// with the VM's Password and fall back to the image's default password when the guest refuses
+// it, so a startup script may replace the image password with the VM's own.
+const WorkerCapabilityGuestPasswordRotation WorkerCapability = "guest-password-rotation"
+
 type WorkerCapabilities []WorkerCapability
 
 //nolint:modernize // preserve the original capability membership helper
