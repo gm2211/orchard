@@ -160,6 +160,33 @@ func (vm *VM) conditionTypeToCondition(conditionType v1.ConditionType) v1.Condit
 	}
 }
 
+// DefaultGuestUser and DefaultGuestPassword are the credentials Tart's and Vetu's base images
+// boot with.
+const (
+	DefaultGuestUser     = "admin"
+	DefaultGuestPassword = "admin"
+)
+
+// guestPasswordAuth answers with the VM's own password, then, if the guest refuses it, with the
+// image's default one. That lets a VM's startup script replace a well-known image password with
+// the VM's own: the startup script's first connection still gets in on the image password, and
+// every later one (the shutdown script, a startup script rerun after a restart) on the new one.
+// Workers that do this advertise v1.WorkerCapabilityGuestPasswordRotation.
+func guestPasswordAuth(password string) ssh.AuthMethod {
+	passwords := []string{password}
+	if password != DefaultGuestPassword {
+		passwords = append(passwords, DefaultGuestPassword)
+	}
+	attempt := 0
+
+	return ssh.RetryableAuthMethod(ssh.PasswordCallback(func() (string, error) {
+		next := passwords[min(attempt, len(passwords)-1)]
+		attempt++
+
+		return next, nil
+	}), len(passwords))
+}
+
 func (vm *VM) Shell(
 	ctx context.Context,
 	sshUser string,
@@ -174,22 +201,19 @@ func (vm *VM) Shell(
 
 	// Set default user and password if not provided
 	if sshUser == "" && sshPassword == "" {
-		sshUser = "admin"
-		sshPassword = "admin"
-	}
-
-	// Configure SSH client
-	sshConfig := &ssh.ClientConfig{
-		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			return nil
-		},
-		User: sshUser,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(sshPassword),
-		},
+		sshUser = DefaultGuestUser
+		sshPassword = DefaultGuestPassword
 	}
 
 	if err := retry.Do(func() error {
+		sshConfig := &ssh.ClientConfig{
+			HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+				return nil
+			},
+			User: sshUser,
+			Auth: []ssh.AuthMethod{guestPasswordAuth(sshPassword)},
+		}
+
 		ip, err := getIP(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get VM's IP: %w", err)

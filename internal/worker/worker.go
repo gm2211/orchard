@@ -454,8 +454,7 @@ func (worker *Worker) registerWorker(ctx context.Context) error {
 		MachineID:     platformUUID,
 		DefaultCPU:    worker.defaultCPU,
 		DefaultMemory: worker.defaultMemory,
-		Capabilities: lo.Ternary(worker.runtime.ID() == v1.RuntimeTart || worker.runtime.Synthetic(),
-			v1.WorkerCapabilities{v1.WorkerCapabilityVMEndpoints}, nil),
+		Capabilities:  worker.capabilities(),
 	})
 	if err != nil {
 		return err
@@ -464,6 +463,21 @@ func (worker *Worker) registerWorker(ctx context.Context) error {
 	worker.logger.Infof("registered worker %s", worker.name)
 
 	return nil
+}
+
+func (worker *Worker) capabilities() v1.WorkerCapabilities {
+	var capabilities v1.WorkerCapabilities
+
+	if worker.runtime.ID() == v1.RuntimeTart || worker.runtime.Synthetic() {
+		capabilities = append(capabilities, v1.WorkerCapabilityVMEndpoints)
+	}
+
+	// Tart and Vetu VMs run their scripts through base.VM.Shell; synthetic VMs don't log in.
+	if !worker.runtime.Synthetic() {
+		capabilities = append(capabilities, v1.WorkerCapabilityGuestPasswordRotation)
+	}
+
+	return capabilities
 }
 
 func (worker *Worker) updateWorker(ctx context.Context) error {
