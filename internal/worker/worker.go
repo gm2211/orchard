@@ -454,7 +454,7 @@ func (worker *Worker) registerWorker(ctx context.Context) error {
 		MachineID:     platformUUID,
 		DefaultCPU:    worker.defaultCPU,
 		DefaultMemory: worker.defaultMemory,
-		Capabilities: worker.capabilities(),
+		Capabilities:  worker.capabilities(),
 	})
 	if err != nil {
 		return err
