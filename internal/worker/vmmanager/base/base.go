@@ -14,6 +14,7 @@ import (
 
 	"github.com/avast/retry-go/v4"
 	"github.com/cirruslabs/orchard/internal/dialer"
+	"github.com/cirruslabs/orchard/internal/guestauth"
 	"github.com/cirruslabs/orchard/internal/worker/endpoint"
 	"github.com/cirruslabs/orchard/internal/worker/hostprocess"
 	"github.com/cirruslabs/orchard/internal/worker/ondiskname"
@@ -163,29 +164,9 @@ func (vm *VM) conditionTypeToCondition(conditionType v1.ConditionType) v1.Condit
 // DefaultGuestUser and DefaultGuestPassword are the credentials Tart's and Vetu's base images
 // boot with.
 const (
-	DefaultGuestUser     = "admin"
-	DefaultGuestPassword = "admin"
+	DefaultGuestUser     = guestauth.DefaultUser
+	DefaultGuestPassword = guestauth.DefaultPassword
 )
-
-// guestPasswordAuth answers with the VM's own password, then, if the guest refuses it, with the
-// image's default one. That lets a VM's startup script replace a well-known image password with
-// the VM's own: the startup script's first connection still gets in on the image password, and
-// every later one (the shutdown script, a startup script rerun after a restart) on the new one.
-// Workers that do this advertise v1.WorkerCapabilityGuestPasswordRotation.
-func guestPasswordAuth(password string) ssh.AuthMethod {
-	passwords := []string{password}
-	if password != DefaultGuestPassword {
-		passwords = append(passwords, DefaultGuestPassword)
-	}
-	attempt := 0
-
-	return ssh.RetryableAuthMethod(ssh.PasswordCallback(func() (string, error) {
-		next := passwords[min(attempt, len(passwords)-1)]
-		attempt++
-
-		return next, nil
-	}), len(passwords))
-}
 
 func (vm *VM) Shell(
 	ctx context.Context,
@@ -211,7 +192,7 @@ func (vm *VM) Shell(
 				return nil
 			},
 			User: sshUser,
-			Auth: []ssh.AuthMethod{guestPasswordAuth(sshPassword)},
+			Auth: []ssh.AuthMethod{guestauth.PasswordAuth(sshPassword)},
 		}
 
 		ip, err := getIP(ctx)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cirruslabs/orchard/internal/guestauth"
 	"github.com/cirruslabs/orchard/pkg/client"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
@@ -68,7 +69,7 @@ func runSSHVM(cmd *cobra.Command, args []string) error {
 		},
 		User: username,
 		Auth: []ssh.AuthMethod{
-			ssh.Password(password),
+			guestauth.PasswordAuth(password),
 		},
 	}
 
