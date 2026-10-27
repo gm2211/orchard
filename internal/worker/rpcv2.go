@@ -94,6 +94,8 @@ func (worker *Worker) handlePortForwardV2Inner(
 	var host string
 	var err error
 
+	targetDialer := worker.dialer
+
 	if portForward.VMUID == "" {
 		// Port-forwarding request to a worker
 		host = "localhost"
@@ -111,14 +113,16 @@ func (worker *Worker) handlePortForwardV2Inner(
 		if err != nil {
 			return nil, fmt.Errorf("failed to get VM's IP: %v", err)
 		}
+
+		targetDialer = worker.vmDialer(vm.OnDiskName())
 	}
 
 	// Connect to the VM's port
 
 	var vmConn net.Conn
 
-	if worker.dialer != nil {
-		vmConn, err = worker.dialer.DialContext(ctx, "tcp",
+	if targetDialer != nil {
+		vmConn, err = targetDialer.DialContext(ctx, "tcp",
 			fmt.Sprintf("%s:%d", host, portForward.Port))
 	} else {
 		dialer := net.Dialer{}
