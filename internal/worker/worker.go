@@ -77,6 +77,9 @@ type Worker struct {
 
 	dialer dialer.Dialer
 
+	// guestAgentTransport reaches Tart VMs' ports through the Tart Guest Agent, see vmDialer
+	guestAgentTransport bool
+
 	logger *zap.SugaredLogger
 }
 
@@ -477,7 +480,28 @@ func (worker *Worker) capabilities() v1.WorkerCapabilities {
 		capabilities = append(capabilities, v1.WorkerCapabilityGuestPasswordRotation)
 	}
 
+	if worker.usesGuestAgentTransport() {
+		capabilities = append(capabilities, v1.WorkerCapabilityGuestAgentTransport)
+	}
+
 	return capabilities
+}
+
+func (worker *Worker) usesGuestAgentTransport() bool {
+	return worker.guestAgentTransport && worker.runtime.ID() == v1.RuntimeTart && !worker.runtime.Synthetic()
+}
+
+// vmDialer returns the dialer that reaches the ports of the VM stored on disk as odn: the Tart
+// Guest Agent relay with the guest agent transport, otherwise the worker's dialer (nil means
+// the standard network dialer).
+//
+//nolint:ireturn // the worker's own dialer is an interface
+func (worker *Worker) vmDialer(odn ondiskname.OnDiskName) dialer.Dialer {
+	if worker.usesGuestAgentTransport() {
+		return tart.GuestAgentDialer(odn.String())
+	}
+
+	return worker.dialer
 }
 
 func (worker *Worker) updateWorker(ctx context.Context) error {
@@ -794,7 +818,7 @@ func (worker *Worker) reconcileEndpoints(
 
 	observed := vm.EndpointSet().Reconcile(
 		desired,
-		endpoint.NewVMTargetBinder(vm.IP, worker.dialer),
+		endpoint.NewVMTargetBinder(vm.IP, worker.vmDialer(vm.OnDiskName())),
 	)
 
 	if slices.Equal(vmResource.ObservedEndpoints, observed) {
@@ -1026,7 +1050,7 @@ func (worker *Worker) createVM(odn ondiskname.OnDiskName, vmResource v1.VM) {
 	eventStreamer := worker.client.VMs().StreamEvents(vmResource.Name)
 
 	vm := worker.runtime.NewVM(vmResource, eventStreamer, worker.vmPullTimeHistogram,
-		worker.dialer, worker.softnetPolicyUpdates.OrElse(false), worker.logger)
+		worker.vmDialer(odn), worker.softnetPolicyUpdates.OrElse(false), worker.logger)
 
 	worker.vmm.Put(odn, vm)
 }

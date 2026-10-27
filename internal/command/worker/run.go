@@ -45,6 +45,7 @@ var labels map[string]string
 var noPKI bool
 var defaultCPU uint64
 var defaultMemory uint64
+var guestAgentTransport bool
 var username string
 var addressPprof string
 var debug bool
@@ -87,6 +88,10 @@ func newRunCommand() *cobra.Command {
 		"helper process)")
 	cmd.Flags().StringVar(&addressPprof, "listen-pprof", "",
 		"start pprof HTTP server on localhost:6060 for diagnostic purposes (e.g. \"localhost:6060\")")
+	cmd.Flags().BoolVar(&guestAgentTransport, "guest-agent-transport", false,
+		"reach Tart VMs' ports (scripts, exec, port forwarding) through \"tart exec\" and the "+
+			"Tart Guest Agent instead of the network, so the worker needs no macOS Local Network "+
+			"permission; every VM image must run the Tart Guest Agent")
 	cmd.Flags().BoolVar(&debug, "debug", false, "enable debug logging")
 
 	// Hidden flags
@@ -107,6 +112,10 @@ func runWorker(cmd *cobra.Command, args []string) (err error) {
 		worker.WithName(name),
 		worker.WithLabels(labels),
 		worker.WithDefaultCPUAndMemory(defaultCPU, defaultMemory),
+	}
+
+	if guestAgentTransport {
+		workerOpts = append(workerOpts, worker.WithGuestAgentTransport())
 	}
 
 	// Run the macOS "Local Network" permission helper

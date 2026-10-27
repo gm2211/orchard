@@ -47,6 +47,14 @@ func WithDialer(dialer dialer.Dialer) Option {
 	}
 }
 
+// WithGuestAgentTransport makes the worker reach its Tart VMs' ports through "tart exec" and
+// the Tart Guest Agent instead of the network.
+func WithGuestAgentTransport() Option {
+	return func(worker *Worker) {
+		worker.guestAgentTransport = true
+	}
+}
+
 func WithSynthetic() Option {
 	return func(worker *Worker) {
 		worker.runtime = runtime.NewSynthetic()

@@ -50,6 +50,12 @@ const WorkerCapabilityVMEndpoints WorkerCapability = "vm-endpoints"
 // it, so a startup script may replace the image password with the VM's own.
 const WorkerCapabilityGuestPasswordRotation WorkerCapability = "guest-password-rotation"
 
+// WorkerCapabilityGuestAgentTransport means the worker reaches its Tart VMs' ports (startup and
+// shutdown scripts, exec, port forwards, endpoints) through "tart exec" and the Tart Guest Agent
+// on each VM's control socket instead of the network, so it needs no macOS Local Network
+// permission and its guests need the agent running.
+const WorkerCapabilityGuestAgentTransport WorkerCapability = "guest-agent-transport"
+
 type WorkerCapabilities []WorkerCapability
 
 //nolint:modernize // preserve the original capability membership helper
