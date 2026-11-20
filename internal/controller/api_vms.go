@@ -27,6 +27,9 @@ func (controller *Controller) createVM(ctx *gin.Context) responder.Responder {
 	if responder := controller.authorize(ctx, v1.ServiceAccountRoleComputeWrite); responder != nil {
 		return responder
 	}
+	if responder := controller.refuseWorkerAccount(ctx); responder != nil {
+		return responder
+	}
 
 	var vm v1.VM
 
@@ -193,6 +196,9 @@ func (controller *Controller) updateVMSpec(ctx *gin.Context) responder.Responder
 		if err != nil {
 			return responder.Error(err)
 		}
+		if responder := controller.authorizeWorkerVM(ctx, dbVM); responder != nil {
+			return responder
+		}
 
 		// Changes to host processes require an additional role
 		//nolint:staticcheck // Preserve the original explicit VMSpec comparison.
@@ -305,6 +311,9 @@ func (controller *Controller) updateVMState(ctx *gin.Context) responder.Responde
 		dbVM, err := txn.GetVM(name)
 		if err != nil {
 			return responder.Error(err)
+		}
+		if responder := controller.authorizeWorkerVM(ctx, dbVM); responder != nil {
+			return responder
 		}
 
 		if dbVM.TerminalState() && dbVM.Status != userVM.Status {
@@ -455,6 +464,9 @@ func (controller *Controller) deleteVM(ctx *gin.Context) responder.Responder {
 	if responder := controller.authorize(ctx, v1.ServiceAccountRoleComputeWrite); responder != nil {
 		return responder
 	}
+	if responder := controller.refuseWorkerAccount(ctx); responder != nil {
+		return responder
+	}
 
 	name := ctx.Param("name")
 
@@ -490,6 +502,9 @@ func (controller *Controller) appendVMEvents(ctx *gin.Context) responder.Respond
 		vm, err := txn.GetVM(name)
 		if err != nil {
 			return responder.Error(err)
+		}
+		if responder := controller.authorizeWorkerVM(ctx, vm); responder != nil {
+			return responder
 		}
 		if err := txn.AppendEvents(events, "vms", vm.UID); err != nil {
 			return responder.Error(err)
