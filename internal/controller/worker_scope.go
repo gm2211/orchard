@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/cirruslabs/orchard/internal/responder"
@@ -98,4 +99,55 @@ func (controller *Controller) authorizeGRPCWorkerWatch(ctx context.Context, work
 		return false
 	}
 	return true
+}
+
+// workerRestricted reports whether account is a worker's own credential: one the worker issuer
+// minted (its name prefix), or one bound to a worker, that holds no compute:read. Such an
+// account may act on its own worker and on the VMs assigned to it, and on nothing else. An
+// account with compute:read (the control plane's) is never restricted.
+func workerRestricted(account *v1.ServiceAccount) bool {
+	if account == nil || serviceAccountHasRole(account, v1.ServiceAccountRoleComputeRead) {
+		return false
+	}
+	return account.WorkerName != "" || strings.HasPrefix(account.Name, "grove-worker-")
+}
+
+func workerScopeDenied(format string, args ...any) responder.Responder {
+	return responder.JSON(http.StatusForbidden, NewErrorResponse(format, args...))
+}
+
+// refuseWorkerAccount keeps a worker's own credential off a route no worker needs: creating or
+// deleting VMs, deleting workers, and exec, port-forward and IP look-ups, which reach into a VM
+// on whichever worker runs it. Without it one worker Mac's credential is root in every other
+// worker's VMs.
+func (controller *Controller) refuseWorkerAccount(ctx *gin.Context) responder.Responder {
+	if controller.insecureAuthDisabled || !workerRestricted(serviceAccountFromContext(ctx)) {
+		return nil
+	}
+	return workerScopeDenied("a worker account cannot use this route")
+}
+
+// authorizeWorkerName lets a worker's own credential through only for the worker it is bound to.
+func (controller *Controller) authorizeWorkerName(ctx *gin.Context, workerName string) responder.Responder {
+	if controller.insecureAuthDisabled {
+		return nil
+	}
+	account := serviceAccountFromContext(ctx)
+	if !workerRestricted(account) || workerAccountOwnsName(account, workerName) {
+		return nil
+	}
+	return workerScopeDenied("a worker account can act only on its own worker")
+}
+
+// authorizeWorkerVM lets a worker's own credential through only for a VM assigned to its worker.
+// A VM no worker has been assigned yet is nobody's.
+func (controller *Controller) authorizeWorkerVM(ctx *gin.Context, vm *v1.VM) responder.Responder {
+	if controller.insecureAuthDisabled {
+		return nil
+	}
+	account := serviceAccountFromContext(ctx)
+	if !workerRestricted(account) || (vm != nil && workerAccountOwnsName(account, vm.Worker)) {
+		return nil
+	}
+	return workerScopeDenied("a worker account can act only on the VMs assigned to its worker")
 }

@@ -30,6 +30,10 @@ func (controller *Controller) createWorker(ctx *gin.Context) responder.Responder
 			NewErrorResponse("worker name %v", err))
 	}
 
+	if responder := controller.authorizeWorkerName(ctx, worker.Name); responder != nil {
+		return responder
+	}
+
 	// Provide platform defaults
 	if worker.Arch == "" {
 		worker.Arch = v1.ArchitectureARM64
@@ -99,6 +103,11 @@ func (controller *Controller) updateWorker(ctx *gin.Context) responder.Responder
 		return responder.JSON(http.StatusBadRequest, NewErrorResponse("invalid JSON was provided"))
 	}
 
+	// The worker updated is the one the body names, so that is the name to check.
+	if responder := controller.authorizeWorkerName(ctx, userWorker.Name); responder != nil {
+		return responder
+	}
+
 	return controller.storeUpdate(func(txn storepkg.Transaction) responder.Responder {
 		dbWorker, err := txn.GetWorker(userWorker.Name)
 		if err != nil {
@@ -153,6 +162,9 @@ func (controller *Controller) listWorkers(ctx *gin.Context) responder.Responder 
 
 func (controller *Controller) deleteWorker(ctx *gin.Context) responder.Responder {
 	if responder := controller.authorize(ctx, v1.ServiceAccountRoleComputeWrite); responder != nil {
+		return responder
+	}
+	if responder := controller.refuseWorkerAccount(ctx); responder != nil {
 		return responder
 	}
 

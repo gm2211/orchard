@@ -31,6 +31,9 @@ func (controller *Controller) portForwardVM(ctx *gin.Context) responder.Responde
 		v1.ServiceAccountRoleComputeConnect); responder != nil {
 		return responder
 	}
+	if responder := controller.refuseWorkerAccount(ctx); responder != nil {
+		return responder
+	}
 
 	// Retrieve and parse path and query parameters
 	name := ctx.Param("name")
